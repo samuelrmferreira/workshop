@@ -1,7 +1,7 @@
 ---     
 -
   name: Primeiro playbook
-  hosts: web 
+  hosts: all 
   become: yes
   vars:
   remote_user: ansible 
