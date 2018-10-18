@@ -1,0 +1,159 @@
+= Laboratório
+-------
+
+= Neste laboratório iremos trabalhar com RBD (Rados Block Device)
+
+== O que são block device ?
+ - É uma das formas mais comum para armazenamento de dados
+ - Ceph trata block device como Rados Black Device (RDB)
+ - Arquitetura scale-out permite que o "bloco device" seja acesso com alto desempenho usando dispersão de dados
+ - RBD pode ser usado para entregar bloco device para Openstack, RHEV e Servidor Linux
+
+=== RDB Layout
+ - Todos os objetos em uma imagem RBD têm um nome que começa com o valor contido no campo de prefixo do nome do bloco RBD exibido pelo comando info rbd
+ - Identificando o layout de um RBD
+----
+
+----
+
+== Gerenciamento do RBD
+
+- Ceph Storage suporta RDB devices e seu gerenciamento através do comando "rbd".
+
+
+
+=== Snapshot do block device
+    1. O snapshot dentro do rbd são criados com permissão on-line. Devido à forma como eles são criados, os instantâneos não usam nenhum espaço até que os dados originais mudem.
+    2. Depois que uma instantâneo foi criada, seu conteúdo não pode ser alterado, embora instantâneos incrementais sejam suportados.
+    3. A Ceph pode criar clones de cópia em gravação (COW) de um instantâneo de dispositivo de bloco, o que significa que você pode criar imagens muito rapidamente.
+    Isso é útil, por exemplo, para implantar máquinas virtuais usando uma imagem que contem seu sistema de arquivos raiz.
+    4. Snapshots podem ser clonados e este podem ser escritos. O processo de clone é dividido em três passos:
+    - Criar snapshot
+    - Proteger snapshot
+    - Clonar snapshot
+    5. Depois que o clone ter sido criado, pode ser gerenciado usando as memsas operações disponíveis para qualquer imagem RBD.
+    - Ler de
+    - Escrever para
+    - Clonar
+    - Redimensionar
+
+=== Acesso do kernel ao ambiente
+
+    As máquinas (servidores) podem montar uma imagem RBD usando o módulo Kernel Linux nativo, chamado (krbd).
+
+.Kernel environment access
+
+image::/home/bsteven/Trabalho/Imagens/ceph-krbd.png[]
+
+==== Acesso ao ambiente virtual
+
+- A biblioteca *librbd* mapeia blocos de dados para objetos dentro do Ceph Object Store e herda os recursos do librados.
+Tais como snapshot e clone. +
+- QEMU pode usar imagens de máquinas virtuais que vivem em imagens RBD.
+- Virtualização containers pode dar boot de uma máquina virtual sem necessidade de transferir a imagem para dentro da máquina virtual
+- O arquivo de configuração *rbdmap* lista qual dispositivo do tipo RBD precisam ser montados
+- Na versão 2.0 - O  RBD block storage  é compátivel com _Openstack_ e _RHEV_, não tem suporte para _CloudStack_ e _OpenNebula_
+
+
+==== Acessso ao ambiente virtual com cache
+- O *librbd* suporta cache, conhecido como cache RBD.
+- O *Librbd* não pode aproveitar o cache Linux para seu próprio uso. Portanto, o *librbd* implementa seu próprio mecanismo de cache.
+- Por padrão, o cache está ativado no *librbd*
+
+==== Configurações de cache suportados
+
+- *Caching not Enabled*: A leitura e escrita vai para Ceph Obect Store. A escrita I/O somente retorna quando os dados estão todos dentro journal OSD
+- *Cache Enabled (Write Back)*: Considerando dois valores: os bytes que não estão em cache 'U' e os bytes do cache sujo 'M'. Escrita são retornado imediatamente se *U < M* ou depois da escrita dos dados de volta para o disco até *U < M*
+- *Write-Through Caching:* O maximo de dados suo é definido como zero para forçar a escrita através de cache
+
+=== Espelhando Rados Block Device
+    - O Ceph oferece suporte ao espelhamento RBD, que é configurado em uma base de pool usando dois grupos separados e permite a replicação de um subconjunto ou todas as imagens RBD dentro de um pool.
+    - A origem da imagem RBD pode ser rebaixada, fazendo com que a cópia principal se torne o backup e a imagem RBD de destino pode ser promovida, fazendo com que a cópia secundária se torne a fonte(original).
+
+==== Disaster recovery
+     Em um cenário de recuperação de desastres, as etapas seguintes devem ser realizadas para recuperar o acesso à imagem RBD:
+     - Interromper o acesso à cópia principal
+     - Rebaixar a cópia principal
+     - Promover a cópia secundária
+     - Retomar o acesso à imagem rbd
+
+==== Observações sobre split-brain
+     - Se um evento split-brain for detectado pelo daemon do rbd-mirror, ele não tentará espelhar a imagem afetada até que seja corrigida.
+     - Para retomar o espelhamento de uma imagem, primeiro destrói a imagem desatualizada e depois solicite uma ressincronização na imagem principal.
+     - Para solicitar uma ressincronização de imagem com rbd, use o comando resync com o nome do pool e da imagem.
+     - Para que o rbd-mirror daemon descubra seu cluster, o parceiro precisa estar registrado no pool.
+
+==== Suporte de espalhamento
+     - Pool: Todas as imagems com journaliing habilitado podem ser espelhadas
+     - Espelhamento de imagem
+
+=== Exercício 01 - Trabalhando com RBD (Rados Block Device)
+
+    Este laboratório tem foco no uso do Ceph fornecendo block device para um servidor Linux.
+
+.Passo a passo parte 1/3
+Neste passo iremos criar um usuário para acessar o cluster ceph
+|===
+|Passos|Comando a ser executado | Ação esperada
+|1|Loge no servidor ceph01.labs.corp com usuário root|
+|2|ceph auth get-or-create client.rbd.ceph01 osd 'allow rwx' mon 'allow r' -o /etc/ceph/ceph.client.rbd.ceph01.keyring| Criação do usuário client.rbd.ceph01 para RBD client com permissão RWX para OSDs e permissão R para os Mons
+|3|ceph auth list|Será listado o nome client.rbd.ceph01 e dados das permissões para OSD e mon
+|4|Loge no servidor apoio.labs.corp com usuário ceph|
+|5|yum install -y ceph-common| Pacote necessários para conexão do cliente ao CEPH Cluster
+|6|mkdir /etc/ceph |Criação da pasta ceph
+|7|sudo chown ceph:ceph /etc/ceph/ | Defina permissão do usuário ceph para /etc/ceph
+|8|No servidor ceph01.betfox -- scp /etc/ceph/ceph.conf ceph@apoio.labs.corp:/etc/ceph| Copia o arquivo de configuração do /etc/ceph/ceph.conf para o servidor de apoio
+|9|No servidor ceph01.betfox -- scp /etc/ceph/ceph.client.rbd* ceph@apoio.labs.corp:/etc/ceph| Copia o arquivo de configuração do /etc/ceph/ para o servidor de apoio
+|===
+
+.Passo a passo parte 2/3
+Neste passo iremos realizar as seguinte ações
+
+ - Criar imagem RBD e monta-la  a partir do servidor de apoio.
+ - Criar uma imagem 128 MB
+
+|===
+|Passos|Comando a ser executado | Ação esperada
+|1|Loge no servidor apoio.labs.corp com usuário ceph|
+|2|export CEPH_ARGS='--id rbd.apoio.labs.corp'|Configuração da credencial do CEPH
+|3|rbd create rbd/bbdisk01 --size=128M|Cria bbdisk01 usando a imagem rbd com tamanho de 128MB
+|4|rbd ls|Veja se o block device foi criado
+|5|rbd info rbd/bbdisk01|Veja as configurações do bbdisk01
+|6|sudo rbd --id rbd.ceph01 map rbd/bbdisk01 |Mapeamento o bloco bbdisk01 no servidor de apoio. Deverá aparecer /dev/rbd0 como dispositivo de disco disponível.
+|7|sudo rbd showmapped |Mostrar as informações da montagem do bloco de disco
+|8|sudo mkdir /mnt/rbd |Cria o diretório "rbd"
+|9|sudo mkfs -t ext4 /dev/rdb0 |Formata o bloco /dev/rbd
+|10|sudo mount /dev/rbd0 /mnt/rbd |Monta o volume /dev/rbd0 no diretorio /mnt/rbd
+|11|sudo chown ceph:ceph /mnt/rbd |Define o usuário ceph como propretário da pasta "ceph"
+|12|Digite df -h |Anote os valores do ponto de montagem /mnt/rbd
+|13|dd if=/dev/zero of=/tmp/testrbd bs=10M count=1|Cria um arquivo de 10MB
+|14|cp /tmp/testrbd /mnt/rbd/test1 |Copia o arquivo para dentro /mnt/rbd
+|15|df -h |Anote os valores e compare com a saída anterior. Verifique que foram consumidos 10MB do volume CEPH
+|16|ceph df |Anote a quantidade objetos
+|17|cp /tmp/testrbd /mnt/rbd/test2|Copie o arquivo para dentro do volume ceph
+|18|ceph df |Anote a quantidade objetos e compare o passo 16
+|===
+
+.Passo a passo parte 3/3
+Neste passo iremos realizar as seguinte ações
+
+ - Vamos checar o espaço em disco do pool rbd
+ - Inserir dados via rados
+ - Demonstando o volume de teste
+
+|===
+|Passos|Comando a ser executado | Ação esperada
+|0|Continue logado no servidor de apoio |
+|1|rados -p rbd put test /tmp/testrbd |É criado um novo ojeto (testrbd) com nome test.
+|2|digite df -h |Anote a quantidade consumida pelo upload feito do novo objeto (test)
+|3|ceph df >  ~/saida-passo3.txt |Verifique a quantidade de objetos para o pool rbd e quantidade de objetos
+|4|rbd du rbd/test |Verifica o tamanho da imagem e disponível para armazenamento
+|5|sudo umount /mnt/rbd |Desmonta o ponto de montagem /mnt/rbd
+|6|sudo rbd --id rbd.ceph01 unmap /dev/rbd0|Remove o mapeamento entre block device ceph e o servidor
+|7|rbd showmapped |A saída não deverá monstrar o volume nenhum.
+|8|rbd rm rbd/test |Remove a imagem test
+|9|rbd ls |Verifica se existe a imagem test
+|10| rados -p rbd rm test |
+|11| rados -p rbd ls |
+|12| ceph df | Compare com os resultados do passo 3|
+|===

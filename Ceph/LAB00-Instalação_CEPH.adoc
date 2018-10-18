@@ -1,0 +1,450 @@
+= Sumário
+-------
+
+= Visão macro para instalação do CEPH
+  - Entendendo a topologia  para implementação do Ceph
+  - Preparando o ambiente para deploy Ceph
+     - Subscrevendo os repositórios CEPH
+     - Criação do usuário Ansible
+     - Compartilhamento da chave SSH do usuário Ansible
+     - Sincronismo de horário
+     - Configurando servidor de nomes ou /etc/hosts
+
+== Entendendo a topologia para imeplementação do ceph
+
+== Conjunto de recursos do workshop
+
+.Tabela de ips dos servidores (External - 30.0) (Internal - 50.0)
+|===
+|IPS| Servidor
+|192.168.10.44 | apoio.lab.corp
+|192.168.20.44 | apoio.labs.corp
+|192.168.10.43 | deploy.lab.corp
+|192.168.20.43 | deploy.labs.corp
+|192.168.10.40 | ceph01.labs.corp
+|192.168.20.40 | ceph01.labs.corp
+|192.168.10.41 | ceph02.labs.corp
+|192.168.20.41 | ceph02.labs.corp
+|192.168.10.42 | ceph03.labs.corp
+|192.168.20.42 | ceph03.labs.corp
+|===
+
+.Recursos de rede
+|===
+|Recurso |IP
+|NTP     |a.st1.ntp.br
+|DNS     |192.168.10.1
+|GATEWAY |192.168.10.2
+|===
+
+== Preparando o ambiente para instalação do Ceph
+   - Neste procedimento iremos trabalhar com servidor deploy.labs.corp e apenas iremos registar os repositorios nos servidores ceph01, ceph02 e ceph03.
+  -  O servidor deploy.labs.corp  é dedicado para instalação e gerenciamento da instalação do cluster CEPH.
+  - Não descarte este servidor após a instalação do cluster CEPH.
+
+=== Subscrevendo o repositório necessários para instalação CEPH
+
+.No servidor deploy.labs.corp:
+
+1. Loge no servidor deploy.labs.corp e execute o comando abaixo:
+
+ subscription-manager repos --disable='*' --enable=rhel-7-server-rpms --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-rhscon-2-installer-rpms --enable=rhel-7-server-rhscon-2-main-rpms
+
+.Nos servidores ceph01,ceph02, ceph03
+
+2. Loge no servidores ceph01.labs.corp , ceph02.labs.corp e  ceph02.labs.corp e digite comando abaixo em cada um deles.
+
+  subscription-manager repos --disable='*' repos --enable=rhel-7-server-rpms --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-rhceph-2-mon-rpms --enable=rhel-7-server-rhceph-2-osd-rpms --enable=rhel-7-server-rhceph-2-tools-rpms
+
+.Repositórios a serem ativados por função do servidor
+|===
+|Repositório | Função
+|rhel-7-server-rhscon-2-installer-rpms|Ceph-deploy
+|rhel-7-server-rhscon-2-main-rpms     |Ceph-Deploy
+|rhel-7-server-rhceph-2-mon-rpms       |Monitor nodes
+|rhel-7-server-rhceph-2-osd-rpms       |OSD Nodes
+|rhel-7-server-rhceph-2-tool-rpms      |RGW Nodes/Client Nodes/MDS Nodes
+|rhel-7-server-rpms                   |Todas as funções
+|rhel-7-server-optional-rpms          |Todas as funções
+|===
+
+
+=== Preparando o servidor Ceph Deploy
+
+1. Nesta tarefa basicamente iremos realizar os seguintes passos:
+
+    - Criação do usuário de instalação
+    - Sincronizar o servidor de horário
+
+
+
+=== Criação do usuário de instalação (ceph-ansible)
+
+Neste passo iremos criar um usuário chamado "ceph-deployment" em cada servidor CEPH (deploy e ceph) do cluster. Deverá feito a configuração permitindo ao usuário ceph-deployment privilégio de root via sudo para realizar a instalação do Ceph.
+
+.Comando para criação do usuário
+
+    adduser ceph-deployment
+    passwd ceph-deployment --> Coloque a senha 'redhat2017'
+
+.Procedimento para configuração do sudo para o usuário ceph-deployment
+    cat << EOF >/etc/sudoers.d/<username>
+    <username> ALL = (root) NOPASSWD:ALL
+    EOF
+
+.Procedimento para compartilhar a chave ssh do usuário ceph-deployment
+
+    Dentro do servidor "deploy.labs.corp" mude para o usuário ceph-deployment, crie a chave e compartilhe a chave com os outros servidor do cluster.
+
+    Comandos:
+     1. su - ceph-deployment
+     2. ssh-keygen <<tecle enter>>
+     3. ssh-copy-id ceph-deployment@ceph01.labs.corp
+     4. ssh-copy-id ceph-deployment@ceph02.labs.corp
+     5. ssh-copy-id ceph-deployment@ceph03.labs.corp
+     6. ssh-copy-id ceph-deployment@deploy.labs.corp
+
+
+
+.Logado com o usuário ceph-deploymento vamos permitir que o ceph-deployment faça login sem usuário e senha nos outros nós do cluster Ceph
+
+   1. Crie o arquivo "config" Comando
+   1.1 - > ~/.ssh/config
+   2. Altere a permissão arquivo "config" com comando: chmod 600 ~/.ssh/config
+   3. Cadastre os servidores participantes do cluster +
+        Host node1 +
+        Hostname <hostname> +
+        User <username> +
+        Host node2 +
+        Hostname <hostname> +
+        User <username> +
+        Host node3 +
+        Hostname <hostname> +
+        User <username> +
+   4. Após está configuração o processo de login não irá pedir mais usuário e senha +
+
+----
+Comando:
+ssh -l ceph-deployment ceph02 ou ssh ceph-deployment@ceph02
+----
+
+
+=== Sincronizando servidor de horário ao servidor participantes do Cluster CEPH
+
+Instale o pacote ntpdate nos servidores ceph01,ceph02,ceph03 e deploy:
+
+----
+yum install -y ntpdate ntp
+----
+
+Entre no arquivo  arquivo /etc/ntp.conf e altere o arquivo da forma abaixo:
+
+    Insira a linha "server a.st1.ntp.br  iburst"
+
+    Comente com "#" todos as linhas abaixo
+    #server 0.rhel.pool.ntp.org iburst
+    #server 1.rhel.pool.ntp.org iburst
+    #server 2.rhel.pool.ntp.org iburst
+    #server 3.rhel.pool.ntp.org iburst
+
+
+Force o sincronismo de horario com servidor de horário
+----
+comando: ntpdate a.st1.ntp.br
+----
+
+== Iniciando a instalação do Ceph Cluster via Ansible deployment
+
+
+=== Passo 01 - Instalando os pacotes necessários para instalação Ceph com Ansible
+
+Certifique-se de estar logado com o usuário ceph-deployment no servidor deploy.labs.corp
+
+    Comando: id
+    Comando: hostnamectl status
+
+Instale os pacotes necessário para deploymento do ceph
+
+   Comando: yum  -y install ceph-ansible
+
+=== Passo 02 - Configurando os parâmetros de instalação do Ansible deployment
+
+Abra o arquivo /etc/ansible/ansible.cfg
+
+    Comando: sudo vi /etc/ansible/ansible.cfg
+
+Altere os seguintes parâmetros dentro do arquivo ansible.cfg
+
+.Alteração da configuração de deployment do Ansible
+|===
+|Parâmetro |Valor
+|inventory     | inventory = /etc/ansible/hosts
+|remote_user   | remote_user = ceph-deployment
+|===
+
+=== Passo 03 - Configurando inventário da instalação do cluster Ceph
+
+Neste passo será registrado dentro do arquivo /etc/ansible/hosts todos os servidores pertecentes a instalação de ceph-cluster
+
+1. Abra o arquivo /etc/ansible/hosts
+
+    comando: sudo vi /etc/ansible/hosts
+
+
+2.Atualize  o arquivo "/etc/ansible/hosts" seguindo o exemplo abaixo:
+
+
+    [mons]
+    labceph01.labs.corp
+    labceph02.labs.corp
+    labceph03.labs.corp
+    [osds]
+    labceph01.labs.corp devices="[ '/dev/vdb' ]"
+    labceph02.labs.corp devices="[ '/dev/vdb' ]"
+    labceph03.labs.corp devices="[ '/dev/vdb' ]"
+
+.Observações
+    1. Nessa instalação o cluster terá multiplas funções (OSD e Mon).
+    2. No item [osds] cadastre o disco secundário alocado em cada um dos servidores
+    3. Use o comando "cat /etc/ansible/hosts |grep -v  ^# |grep [a-Z]" para filtrar espaço e linhas comentadas
+
+==== Passo 04 - Testando (rede e acesso) dos servidores  registrados no inventário.
+
+É possível testar se todos os servidores registrados dentro do inventário estão funcionais a nível de rede e privilégio do usuário ceph-deployment.
+
+     Testando conectividade
+     Comando: ansible mons -m ping
+
+Verificando o usuário que está conectando remotamente em cada servidor.
+
+     Comando:ansible mons -m command -a id -b
+
+.Observações
+
+- A saída de comando exibirá uid=(root) isto indica que a escalação de privilégio está funcionando.
+
+=== Passo 05 -  Iniciando o deployment do cluster Ceph via Ansible
+
+Agora iniciaremos as configurações que detalham como será instalado o Ceph via Ansible.
+
+
+==== Preparando o deployment dos servidores Monitors do Cluster Ceph
+
+Usando o template no arquivo "/usr/share/ceph-ansible/site.yml.sample" crie o arquivo site.yml dentro do mesmo diretório.
+
+    Procedimento
+    1. cd /usr/share/ceph-ansible/
+    2. sudo cp site.yml.sample site.yml
+
+
+==== Ajustando o arquivo de configuração mons.yaml
+
+Usando o template localizado dentro de /usr/share/ceph-ansible/group_vars/mons.yml.sample crie o arquivo mons.yml dentro do mesmo diretório
+
+    Procedimento
+    1. cd /usr/share/ceph-ansible/group_vars
+    2. sudo cp mons.yml.sample mons.yml
+    3. Abra o arquivo mons.yml - comando: vi mons.yml
+
+Ajuste o arquivo  mons.yaml de acordo com exemplo abaixo
+----
+dummy:
+fetch_directory: /home/ceph-deployment/ceph-ansible-keys
+mon_group_name: mons
+fsid: "{{ cluster_uuid.stdout }}"
+monitor_secret: "{{ monitor_keyring.stdout }}"
+cephx: true
+----
+
+==== Ajustando o arquivo de configuração osds.yaml
+
+Usando o template localizado dentro de /usr/share/ceph-ansible/group_vars/osds.yml.sample, crie o arquivo osds.yml dentro do mesmo diretório
+
+
+    Procedimento
+    1. cd /usr/share/ceph-ansible/groups_vars
+    2. sudo cp osds.sample osds.yaml
+    3. Abra o arquivo osds.yml - comando: vi osds.yml
+
+Ajuste o arquivo "osds.yml" para ficar de acordo com exemplo abaixo:
+
+----
+dummy:
+fsid: "{{ cluster_uuid.stdout }}"
+cephx: true
+osd_auto_discovery: true
+journal_collocation: true
+----
+
+.Observações
+ - Não remova nenhuma linha do arquivo de configuração.
+
+==== Configurando os parâmetros gerais da instalação do Cluster Ceph
+
+Usando o template localizado dentro de /usr/share/ceph-ansible/site.yml.sample crie o arquivo site.yml dentro do mesmo diretório
+
+    Procedimento
+    1. cd /usr/share/ceph-ansible/group_vars
+    2. sudo cp all.sample.yml all.yml
+    3. sudo vi all.yml
+
+
+Exemplo do all.yml
+
+----
+---
+dummy:
+### General
+fetch_directory: /home/ceph-deployment/ceph-ansible-keys/
+cluster: ceph
+
+mon_group_name: mons
+osd_group_name: osds
+rgw_group_name: rgws
+mds_group_name: mdss
+check_firewall: False
+ceph_stable_rh_storage: True
+ceph_stable_rh_storage_version: 2
+ceph_stable_rh_storage_cdn_install: True
+
+generated_fsid: True
+fsid: "{{ cluster_uuid.stdout }}"
+cephx: True
+max_open_files: 131072
+#monitor options
+monitor_interface: eth1
+mon_use_fqdn: True
+#OSD
+public_network:  192.168.10.0/24
+cluster_network: "{{ public_network }}"
+monitor_network: 192.168.20.0/24
+journal_size: 1024
+osd_mkfs_type: xfs
+osd_mkfs_options_xfs: -f -i size=2048
+osd_mount_options_xfs: noatime,largeio,inode64,swalloc
+osd_objectstore: filestore
+#calamari: true
+ceph_conf_overrides:
+  global:
+    mon_initial_members: ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+    mon_host: ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+    mon_osd: ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+    mon_osd_allow_primary_affinity: true
+    osd_pool_default_size: 2
+    osd_pool_default_min_size: 1
+    mon_pg_warn_min_per_osd: 0
+    mon_pg_warn_max_per_osd: 0
+    mon_pg_warn_max_object_skew: 0
+
+  client:
+    rbd_default_features: 1
+    rbd_default_format: 2
+    rbd_cache: "true"
+    rbd_cache_writethrough_until_flush: "false"
+
+----
+
+
+==== Atenção de continuar valide se as configurações abaixo foram executadas
+
+1. Desligue o firewall  local comando: "
+1.1 systemctl stop firewalld && iptables -t filter -F
+2. Sincronize o servidor de horário
+3. Evite o uso de caracteres especias, espaços e fique atenco com a identação dos arquivos yaml.
+4. Reveja todos os passos antes de continuar o próximo procedimento
+
+=== Passo 06 -  Executando a instalação Ceph-deployment
+
+
+1. Certifique-se que esteja logado com o usuário ceph-deployment
+2. Dentro da pasta /usr/share/ceph-ansible/ execute o
+
+   comando: ansible-playbook site.yml
+
+
+==== Validando a instalação do Ansible
+
+
+1. Após realização do deploymento do Ceph via Ansible. Valie o resultado procurando pelo indicador *failed=0*
+2. Loge no servidor ceph01.bblab.corp usando o usuário root e execute o comando ceph -s
+
+
+.Saída esperada do comando
+
+
+   [root@ceph01 ~]# ceph -s
+    cluster b8844955-7ebe-4ad6-a2c0-8d470ba0319a
+     health HEALTH_OK
+     monmap e1: 3 mons at {ceph01.labs.corp=192.168.50.100:6789/0,ceph02.labs.corp=192.168.50.101:6789/0,ceph03.labs.corp=192.168.50.102:6789/0}
+            election epoch 4, quorum 0,1,2 ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+     osdmap e6: 3 osds: 3 up, 3 in
+            flags sortbitwise,require_jewel_osds
+      pgmap v16: 64 pgs, 1 pools, 0 bytes data, 0 objects
+            101244 kB used, 36732 MB / 36830 MB avail
+                  64 active+clean
+
+3. Valide o arquivo de configuração - /etc/ceph/ceph.conf
+
+----
+comando: cat /etc/ceph/ceph.conf
+
+----
+
+.Saída esperada do comando:
+
+----
+[client]
+rbd_default_features = 1
+rbd_cache_writethrough_until_flush = false
+rbd_default_format = 2
+rbd_cache = true
+
+[global]
+mon initial members = ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+mon_pg_warn_max_object_skew = 0
+cluster network = 192.168.50.0/24
+mon host = 192.168.30.100,192.168.30.101,192.168.30.102
+mon_osd_allow_primary_affinity = True
+osd_pool_default_size = 2
+osd_pool_default_min_size = 1
+mon_pg_warn_min_per_osd = 0
+mon_osd = ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+mon_host = ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+mon_pg_warn_max_per_osd = 0
+public network = 192.168.50.0/24
+mon_initial_members = ceph01.labs.corp,ceph02.labs.corp,ceph03.labs.corp
+max open files = 131072
+fsid = b8844955-7ebe-4ad6-a2c0-8d470ba0319a
+
+[client.libvirt]
+admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok # must be writable by QEMU and allowed by SELinux or AppArmor
+log file = /var/log/ceph/qemu-guest-$pid.log # must be writable by QEMU and allowed by SELinux or AppArmor
+
+[osd]
+osd mkfs options xfs = -f -i size=2048
+osd mkfs type = xfs
+osd journal size = 1024
+osd mount options xfs = noatime,largeio,inode64,swalloc
+----
+
+
+4. Validando a configuração dos nós OSD do CEPH
+
+----
+Comando: ceph osd tree
+----
+
+.Saída esperada:
+
+----
+
+[root@ceph01 ~]# ceph osd tree
+ID WEIGHT  TYPE NAME       UP/DOWN REWEIGHT PRIMARY-AFFINITY
+-1 0.03506 root default
+-2 0.01169     host ceph03
+ 0 0.01169         osd.0        up  1.00000          1.00000
+-3 0.01169     host ceph02
+ 2 0.01169         osd.2        up  1.00000          1.00000
+-4 0.01169     host ceph01
+ 1 0.01169         osd.1        up  1.00000          1.00000
+----

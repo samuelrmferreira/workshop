@@ -1,0 +1,41 @@
+= Workshop Ansible Tower
+
+
+== O que é isso ?
+
+Esse material é usado para capacitação e transferência de conhecimento de clientes e parceiros da Red Hat Brasil em Ansible, aplicável tanto ao Ansible-core  quanto ao Ansible Tower.
+
+
+
+== Por que dessa forma ?
+
+Inspirados na cultura open-source, acreditamos que, ao disponibilizar o material de forma aberta, podemos evoluir o workshop de forma colaborativa e alinhado com as necessidades dos nossos clientes, parceiros e a comunidade.
+
+Este trabalho está licenciado sob a Licença Atribuição-NãoComercial-CompartilhaIgual 4.0 Internacional Creative Commons (CC BY-NC-SA 4.0).
+
+== Como devo usar ?
+
+Não existe uma maneira certa ou errada de usar o conteúdo deste material. Você poderia seguir como um roteiro independente, usando a sua máquina particular como ambiente de experimentações, ou você pode se reunir com colegas e compartilhar a experiência.
+
+Se você tiver interesse de participar de um workshop com o time Red Hat Brasil, entre em contato com o seu time de contas/parceiro!
+
+- Para conseguir aproveitar o material, nossa recomendação é:
+
+- Reserve entre 4-8 horas para discussão dos assuntos e execução das atividades.
+
+- Acesso à Internet é indispensável.
+
+- Todos os participantes devem ter acesso à um computador capaz de rodar máquinas virtuais, preferencialmente individual:
+
+* Processador dual-core de 2GHz
+* 8GB de memória RAM
+* 40GB de disco livre
+* Virtualizador (QEMU/KVM, Oracle VirtualBox, VMware Workstation)
+
+== Por onde começar?
+
+Esse material é dividido em 2 partes:
+
+
+Parte 1 - Ansible Core: Material dedicado à discussão introdutória sobre a Ansible Core.
+Parte 2 - Ansible Tower: Material dedicado à discussão sobre o Ansible Tower.

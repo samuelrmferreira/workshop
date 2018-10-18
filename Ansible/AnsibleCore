@@ -1,0 +1,126 @@
+= Parte 1 - Ansible core
+
+= Introdução
+
+Bem-vindo ao nosso laboratório de Ansible-Core. Você deve ter recebido um e-mail nosso com dados de acesso ao laborátorio.
+
+Abra esse e-mail e siga os passos a seguir.
+
+==== Antes de acessar o laboratório verifique os itens abaixo:
+
+* Notebook com acesso à Internet
+* Navagador de Internet com Firefox ou Google Chrome
+* 4 GB de memória RAM
+* Linux: Centos ou RHEL (virtualizado ou físico)
+
+
+
+==== Testando tudo
+
+Agora você tem os dados do ambiente e notebook funcionando. Faça um teste e tente logar em cada servidor usando putty ou ssh (linux nativo)
+
+
+=== Topologia do laboratório
+
+Foto do ambiente
+
+
+
+== Let's Rock
+
+==== LAB01 - Instalação Ansible-Core
+
+Primeiro passo é acessar o servidor AnsibleCore e instalar instalar os pacotes relacionados ao Ansible-Core.
+
+===== Instalação do Ansible Core passo - passo
+ yum  localinstall -y https://mirror.cedia.org.ec/epel/7/x86_64/e/epel-release-7-10.noarch.rpm <1>
+ yum install -y ansible-core <2>
+
+<1> Instalação do repositório epel
+<2> Instalação do Ansible Core
+
+
+
+===== Configurando o usuário Ansible
+
+Neste passo iremos criar um usuário chamado "ceph-deployment" em cada servidor CEPH (deploy e ceph) do cluster. Deverá feito a configuração permitindo ao usuário ceph-deployment privilégio de root via sudo para realizar a instalação do Ceph.
+
+.Comando para criação do usuário
+
+    adduser ansible-core
+    passwd  ansible-core <1>
+
+<1> Coloque a senha 'redhat2017'
+
+.Procedimento para configuração do sudo para o usuário ceph-deployment
+    cat << EOF >/etc/sudoers.d/<username>
+    <username> ALL = (root) NOPASSWD:ALL
+    EOF
+
+===== Criando e compartilhando chave SSH
+ fff
+
+
+
+===== Configurando o sudo ...Gostamos de estar sempre seguro :-)
+ fff
+
+
+==== LAB02 - Configurando um inventário manualmente
+
+Neste laborátorio iremos criar um inventário para nosso laboratório
+
+===== Criando inventário
+
+ su ansible-core
+ vi inventario01.ini
+
+===== Exemplo de inventário para este laboratório
+
+ j
+
+==== LAB03 - Módulos para execução de comandos
+
+===== Testando comando uptime
+
+ ansible all -i ./inventario -m command -a "uptime"
+
+
+===== Instalando um pacote diretamente num grupo de hosts
+
+ansible web -s -i ./inventario -m yum -a "name=httpd state=present"
+
+===== Inicialiando comando
+
+ ansible web -s -i ./hosts -m service -a "name=snmpd enabled=yes status=srtarted"
+
+===== Usndo o módulo ping
+ comando para ping
+
+
+=== Desafio
+
+1. Utilize o modulo ping para pingar todos os servidores
+2. Habilite o repositorio XPTO em todos os servidores
+3. Instale o telnet apenas nos servidores web
+4. Defina o Selinux para permissive
+
+
+==== LAB04 - Construindo primeiro playbook
+
+===== Utilize o modelo abaixo como padrão
+ fgg
+
+===== Valide seu playbook
+
+ ff
+
+===== Executando playbook
+ ff
+
+===== Utilizando loop
+ fff
+
+===== LAB05 - Trabalhando com Handlers
+
+ O que é Handlers ? Qual importancia ?

@@ -1,0 +1,9 @@
+--
+- 
+ hosts: all
+ tasks:
+ - name: Prints various Ansible facts
+   debug:
+     msg: >
+       The default IPv4 address of {{ ansible_fqdn }}
+       is {{ ansible_default_ipv4.address }}

@@ -1,0 +1,932 @@
+= Parte 1 - Ansible core
+
+== Introdução
+
+Bem-vindo ao nosso laboratório de Ansible-Core/Ansible-Tower. Você deve ter recebido um e-mail nosso com dados de acesso ao laborátorio.
+
+Abra esse e-mail e siga os passos a seguir.
+
+=== Antes de acessar o laboratório verifique os itens abaixo:
+
+* Notebook com acesso à Internet
+* Navagador de Internet com Firefox ou Google Chrome
+* 4 GB de memória RAM
+* Linux: Centos ou RHEL (virtualizado ou físico)
+
+
+=== Testando tudo
+
+Agora você tem os dados do ambiente e notebook funcionando. Faça um teste e tente logar em cada servidor usando putty ou ssh (linux nativo)
+
+
+=== Topologia do laboratório
+
+.Tabela dos servidores e funcionalidades
+|===
+|Servidor|Função|S.O|IP
+|ansibletower.labs.corp|Servidor Ansible Core / Tower 3.3 |RHEL 7.5|192.168.10.100
+|idm.labs.corp|Servidor IDM (DNS/LDAP/Horario) |RHEL 7.5|192.168.10.6
+|servidor01.labs.corp|Servidor de Teste 01|RHEL 7.5|192.168.10.110
+|servidor02.labs.corp|Servidor de Teste 02|RHEL 7.5|192.168.10.111
+|servidor03.labs.corp|Servidor de Teste 03|Windows Server 2012|192.168.10.112
+|===
+
+
+.Tabela de usuários e senhas
+|===
+|Usuário|Senha|Função
+|root|rooter%2018|super usuário
+|ansible|ansible|usuário Ansible
+|admin|redhat2018|Usuário admin Ansible Tower
+|admin|redhat2018|Usuário admin IDM
+|administrator|windows%2018|Windows Server
+|===
+
+
+_Let's Rock_
+
+== Reconhecendo o ambiente
+
+Efetue o login no servidor 'ansibletower.labs.corp' via porta 22. Utilizando o usuário root e sua senha.
+
+ ssh -l root <ip ou nome do servidor ansibletower.corp>
+
+Agora você está dentro do ambiente do workshop. Vamos validar se todos os servidores estão ok. Execute o comando 'ping ip'
+
+ ping -c 3 ansibletower.labs.corp
+ ping -c 3 idm.labs.corp
+ ping -c 3 servidor01.labs.corp
+ ping -c 3 servidor02.labs.corp
+ ping -c 3 servidor03.labs.corp
+
+E aí deu tudo certo ? Deu trabalho né ?
+
+O ansible trabalha com inventário, está abordagem permite cadastrar servidores e  ativos de rede dentro de um arquivo. Com o inventário configurado podemos executar comando Ansible diretamente em um servidor ou mais de um servidor ou multiplos grupso de servidores. Vamos ver este passo logo mais tarde.
+
+
+== LAB01 - Criando acesso
+
+O ansible realiza conexão usando um usuário local. Pode ser a conta 'root' ou uma conta customizada, por exemplo 'ansible'.
+
+
+=== Criando usuário ansible
+
+Neste passo vamos criar o usuário ansible nos servidores - ansibletower.labs.corp, servidor01.labs.corp e servidor02.labs.corp apenas.
+
+Efetue o login usando a credencial do usuário _root_
+
+ adduser ansible
+ passwd ansible
+
+
+* Coloque a senha 'ansible'
+
+
+=== Configurando sudo
+
+Neste passo iremos configurar o sudo para ativar  elevação de privilégio do usuário comum para usuário especial.
+
+
+Crie o arquivo  _/etc/sudoers.d/ansible_ e coloque o conteudo abaixo para geração da configuração.
+
+ ansible ALL = (root) NOPASSWD:ALL
+
+ou copia aqui e cola ali. ;-)
+
+ cat << EOF >/etc/sudoers.d/ansible
+ ansible ALL = (root) NOPASSWD:ALL
+ EOF
+
+
+=== Compartilhando a chave SSH
+
+
+Ansible utiliza a conexão SSH para realização das suas tarefas, se compartilhamos a chave pública com todos os servidores cadastrados dentro do inventário não será mais necessários logar.
+
+Logado com o usuário _root_ loge com usuário _ansible_
+
+ su ansible
+
+
+
+Execute os comandos abaixo:
+
+ ssh-keygen <1>
+ ssh-copy-id ansible@ansibletower.labs.corp <2>
+ ssh-copy-id servidor01.labs.corp
+ ssh-copy-id servidor02.labs.corp
+
+<1> Comando necessário para criar chave pública
+<2> Comando para compartilhar a chave publica entre os servidor
+
+
+
+
+
+
+== LAB02 - Instalação Ansible-Core
+
+O Ansible-core já foi instalado não é necessário executar este procedimento.
+
+Caso você queira instalar o Ansible-Core. Copie e cole o arquivo abaixo dentro de um arquivo instala-ansible.sh
+
+Conteúdo do script - instala-ansible.sh
+
+ #!/bin/bash
+ #Data: 30/09/2017
+ echo "Instalacao do EPEL"
+ yum  localinstall -y https://mirror.cedia.org.ec/epel/7/x86_64/e/epel-release-7-10.noarch.rpm
+ echo "Instalar pacote Ansible"
+ yum install -y ansible-core
+
+Dê permissão de execução
+
+ chmod +x instala-ansible.sh
+
+E depois execute o script
+
+ ./instala-ansible.sh
+
+
+
+
+== LAB03 - Configurando o inventário
+
+
+Você viu que a utlização do comando ping para cada servidor é uma praticia muito díficil. Vamos melhorar nossa abordagem utilizando iventário.
+
+Loge com usuário Ansible no servidor _ansible-tower.labs.corp_ e entre na pasta _/home/ansible_ , digite:
+
+ mkdir workshop
+ cd workshop
+ vi inventario.ini
+
+Estrutura de pasta #/home/ansible/workshop#
+
+=== Exemplo de inventário simples
+
+  [workshop]
+  ansibletower.labs.corp
+  idm.labs.corp
+  servidor01.labs.corp
+  servidor02.labs.corp
+  servidor03.labs.corp
+
+=== Exemplo do inventario a ser utilizado no workshop
+
+ [linux:vars]
+ ansible_ssh_user=ansible
+ [windows:vars]
+ ansible_user=administrator
+ ansible_password=windows%2018
+ ansible_port=5986
+ ansible_connection=winrm
+ ansible_winrm_server_cert_validation=ignore
+ [infraestrutura]
+ ansibletower.labs.corp
+ idm.labs.corp
+ [web]
+ servidor01.labs.corp
+ [banco]
+ servidor02.labs.corp
+ [windows]
+ servidor03.labs.corp
+ [linux:children]
+ infraestrutura
+ web
+ banco
+
+
+
+=== Validando o ambiente
+Pronto agora temos o nosso inventário finalizado. Olha como é facil validar se todos os servidores dentro do inventário está ativos.
+
+==== Pingando servidor windows
+ ansible windows -i inventario.ini -m win_ping
+
+==== Pingando servidores linux
+ ansible linux -i inventario.ini -m ping
+
+*Gostou ?*
+
+Ansible facilitando a vida no dia a dia.
+
+== LAB04 - Ansible Modules
+
+Ansible entrega um numero de modulos chamados (module library) que podem ser executados diretamente ou através de Palybook. Usuário também pode escrever seus proprios modulos. Estes modulos podem controlar recursos de sistemas, como arquivos , pacotes ou serviço.
+
+
+=== Ansible Modules - AD-Hoc
+
+O Ansible tem modulos ad-hoc , tem como função para executar algumas ações de forma rapida.
+
+Exemplo de um comando ad-hoc
+
+ ansible host-pattern -m module [-a 'module arguments'] [-i inventory]
+
+ ansible all -i inventario.ini -m command -a "uptime"
+
+
+
+*Principais modulos ad-hoc*
+
+ * command
+ * shell
+ * raw
+ * uri
+
+=== Conhecendo mais  modulos
+
+É possível listar modulos e verificar qual pode atender melhor
+
+  ansible-doc -l
+  ansible-doc -l | grep raw
+  ansible-doc raw
+
+Ou acessar diretamente o link com todos os modulos - https://docs.ansible.com/ansible/latest/modules/list_of_all_modules.html
+
+
+=== Instalando um pacote diretamente num grupo de hosts
+
+ ansible  web -i inventario.ini  -s -u ansible -m yum -a "name=httpd state=present"
+
+
+Entendendo melhor os parametros
+
+* -i --> indica o caminho do inventario - (inventario.ini)
+* -l --> limitar ação do comando servidor01.labs.corp
+* -u --> passa o usuário ansible
+* -m --> chama o modulo yum
+* -a --> argumento do modulos -> "name=httpd state=present"
+
+
+
+
+=== Configurando firewall para habilitar o serviço de firewall usando
+
+ ansible web -i inventario.ini   -s -u ansible -m service -a "name=httpd enabled=yes state=started"
+ ansible web -i inventario.ini   -s -u ansible -m shell -a "firewall-cmd --add-port 80/tcp"
+ ansible web -i inventario.ini   -s -u ansible -m shell -a "firewall-cmd --add-port 80/tcp --permanent"
+ ansible web -i inventario.ini   -s -u ansible -m shell -a "firewall-cmd --reload"
+
+
+
+=== Usando o módulo ping
+
+ ansible -i inventario.ini all -m ping <1>
+
+<1> É possível testar se todos os servidores registrados dentro do inventário estão funcionais a nível de rede
+
+=== Validando  o nível de privilégio do usuário ansible
+
+ ansible -i inventario.ini all -m command -a id -b <1>
+
+<1> O resultado da ação do comando Ansible terá como saída qual nível de privilégio
+
+=== Desafio
+
+1. Utilize o modulo ping para pingar todos os servidores
+2. Instale o telnet apenas nos servidores web
+3. Defina o Selinux para permissive:
+
+=== Resposta do desafio
+https://github.com/aspenbr/workshop/blob/master/Ansible/RespostaDesafio01.adoc
+
+
+
+
+== LAB05 - Construindo primeiro playbook
+
+=== Criando o primeiro playbook
+  Loge com usuário ansible
+  su ansible
+  vi ~./workshop/primeiro-playbook-lab05.yaml <1>
+
+<1> Crie o arquivo utilizando vim que será utilizado como ferramenta para escrever os playbook
+
+=== Utilize o modelo abaixo como padrão
+------
+---     <6>
+-
+  name: Primeiro playbook
+  hosts: web <1>
+  become: yes
+  vars:
+  remote_user: ansible <2>
+
+  tasks:
+  - name: Instala a ferramenta net-tools <3>
+    yum: name=net-tools state=latest <4> <5>
+
+------
+
+<1> Nome do grupo de hosts
+<2> Usuário que irá realizar a operação
+<3> Nome da tarefa
+<4> Modulo yum sendo utilizado para instlalação do pacote net-tools na última versão
+<5> Nunca utilize TAB apenas espaço
+<6> Sempre inicie o seu script ansible com ---
+
+=== Salve o seu playbook
+Utilizando o vim salve todas as alterações do script ansible e execute a sequencia de comandos para salvar e  sair do vim '*:wq!*'
+
+=== Verifique se o seu plabybook tem algum tipo de erro
+
+ ansible-playbook --syntax-check -i inventario.ini  primeiro-playbook-lab05.yaml
+
+
+=== Execute teste seco  sobre seu playbook
+
+ ansible-playbook  -i inventario.ini  -C primeiro-playbook-lab05.yaml
+
+=== Execute o playbook
+
+ ansible-playbook -i inventario.ini  primeiro-playbook-lab05.yaml
+
+
+## Lab06 - Ansible Facts
+
+*O que é ?*
+
+Ansible Facts são variáveis que são descobertas automaticamente pelo Ansible em um host gerenciado. As facts contêm informações específicas do host que podem ser usadas como variáveis regulares em reproduções, condicionais, loops ou qualquer outra instrução que depende de um valor coletado de um host gerenciado.
+
+*Exemplo de variaveis que podem recuperadas usando facts*
+
+* The host name
+
+* The kernel version
+
+* The network interfaces
+
+* The IP addresses
+
+* The version of the operating system
+
+* Various environment variables
+
+* The number of CPUs
+
+* The available or free memory
+
+* The available disk space
+
+
+
+### Lab 6.1 -  Listando as variáveis de um host (servidor02.labs.corp)
+
+ ansible banco -i inventario.ini  -u ansible -m setup
+
+ <printar saida>
+
+### Lab 6.2 - Construindo playbook para tratar facts do ipv4
+
+Neste playbook iremos trabalhar facts trabalhando o seu resultado
+
+
+
+ --
+ - hosts: all
+   tasks:
+   - name: Prints various Ansible facts
+     debug:
+       msg: >
+         The default IPv4 address of {{ ansible_fqdn }}
+         is {{ ansible_default_ipv4.address }}
+
+
+
+###   Desligando facts
+
+Um dos motivos do Ansible ter tempo alto para iniciar a execução do playbook é por caua do Facts. Toda vez que um problema é executado, facts do servidor alvo é realizado. É possível desligar checagem de facts.
+
+Inserindo o parametro *gather_facts: no* em um playbook:
+
+
+
+  ----
+  - name: This play gathers no facts automatically
+  hosts: large_farm
+  gather_facts: no  <1>
+
+
+<1> Parametro para desligar coleta de facts
+
+
+
+### Lab 6.3 - Ativando filtros para facts
+
+Neste Lab iremos trabalhar com facts para servidor
+
+  ansible banco -i inventario.ini  -u ansible -m setup -a 'filter=ansible_eth0'
+
+  ansible web -i inventario.ini  -u ansible -m setup -a 'filter=ansible_eth0'
+
+
+
+
+## Lab07 - Trabalhando com variáveis
+
+O Ansible suporta variáveis que podem ser usadas para armazenar valores que podem ser reutilizados em todos os arquivos em um projeto Ansible inteiro. Isso pode ajudar a simplificar a criação e manutenção de um projeto e reduzir a incidência de erros.
+
+
+As variáveis fornecem uma maneira conveniente de gerenciar valores dinâmicos para um determinado ambiente em seu projeto Ansible. Alguns exemplos de valores que as variáveis podem conter incluem
+
+* Criação de usuário
+* Pacotes de instalação
+* Reiniciar serviços
+* Arquivos para remover
+* Receber arquivos da internet
+
+### Nomeando variáveis
+
+As variáveis possuem nomes que consistem em uma string que deve começar com uma letra e pode conter apenas letras, números e sublinhados.
+
+.Variáveis Ansible
+
+|===
+|Nomes invalidos| Nomes Válidos
+|web server | web_server
+|remote.file | remote_file
+|1st file | file_1 ou file1
+|remoteserver$1 | remote_server_1 ou remote_server1
+|===
+
+*Definição de variável*
+
+Variáveis podem ser definidas em uma variedade desconcertante de lugares em um projeto Ansible. No entanto, isso pode ser simplificado para três níveis básicos de escopo:
+
+
+* _Global scope:_ Variáveis configuradas a partir da linha de comandos ou configuração Ansible
+* _Play scope:_ Variáveis definidas dentro do play e  estruturas relacionadas
+* _Host scope:_ Variáveis definidas em grupos de hosts e hosts individuais pelo inventário, coleta de dados ou tarefas registradas
+
+###  Lab 7.1  Exemplo de playbook usando variaveis
+------
+---
+-
+   hosts: all
+   name: exemplo do uso playbook
+   vars:
+     user: joe
+   tasks:
+   # This line will read: Creates the user joe
+   - name: Creates the user {{ user }}
+     user:
+       # This line will create the user named Joe
+       name: "{{ user }}"
+------
+
+Salve o playbook  com o nome _playbook_variavel.yaml_
+
+
+#### Lab 7.2  Trabalhando com loop
+
+
+------
+---
+-
+  name: Segundo Playbook - trabalhando com loop
+  hosts: web
+  remote_user: ansible
+  become: yes
+  gather_facts: no
+  vars:
+   state: latest
+
+  tasks:
+  - name: Instalando Apache e PHP
+    yum: name={{ item }} state={{ state }}
+    with_items:
+      - httpd
+      - php
+
+------
+
+=== Execute o playbook
+
+  ansible-playbook -i inventario.ini  ~./loop_playbook.yaml
+
+=== Lab 7.3  Trabalhando com variaveis
+
+
+------
+---
+-
+  name: Trabalhando com variaveis 2
+  hosts: web
+  remote_user: ansible
+  become: yes
+
+      - name: debug
+       hosts: all
+
+      tasks:
+       - name: Show hostvars[inventory_hostname]
+         debug: var=hostvars[inventory_hostname]
+
+       - name: Show ansible_ssh_host variable in hostvars
+         debug: var=hostvars[inventory_hostname].ansible_ssh_host
+
+       - name: Show group_names
+         debug: var=group_names
+
+       - name: Show groups
+         debug: var=groups
+
+------
+
+
+=== Testando a função para de tratamento de arquivos
+
+  Utilizando o vim crie o   playbook com o nome *_trata-playbook.yaml_*
+
+=== Execute o playbook
+
+      ansible-playbook -i inventario.ini  ~./trata-playbook.yaml
+
+== LAB08 - Trabalhando com Handlers "Manipuladores"
+
+
+*O que são  Handlers ? Qual é sua importância ?*
+
+Semelhante a uma tarefa, exceto que os handlers executam somente em resposta a uma tarefa configurada para notificar o handler na mudança de estado.
+
+=== Exemplo de um playbook que utiliza handlers para gerenciar o serviço do Apache
+
+------
+---
+-
+ name: Trabalhando com Handlers
+ hosts: web
+ remote_user: ansible-core
+ become: yes
+
+ tasks:
+   - name: Testando handlers do Apache
+     yum: name={{ item }} state=installed
+     with_items:
+       - httpd
+       - memcached
+     notify: Restart Apache
+
+   - template: src=templates/httpd.conf.j2 dest=/etc/httpd/conf/httpd.conf
+     notify: Restart Apache
+
+ handlers:
+   - name: Restart Apache
+     service: name=httpd state=restarted
+------
+
+
+Utilizando o vim crie o  terceiro playbook utilizando o modelo acima e  com o nome *_terceiroplaybook.yaml_*
+
+=== Execute o playbook
+
+  ansible-playbook -i inventario.ini  ~./terceiroplaybook.yaml
+
+== LAB09 - Trabalhando com TAGS
+
+*Por que devo usar Tags ?*
+
+Se você tiver um grande playbook, o uso de TAGs tornar-se útil para executar uma parte específica do playbook, sem executar todo o playbook.
+
+
+------
+
+---
+-
+ name: Trabalhando com tags
+ hosts: web
+ remote_user: ansible-core
+ become: yes
+
+ tasks:
+   - name: instala httpd e memcached ou configura
+     yum: name={{ item }} state=installed
+     with_items:
+       - httpd
+       - memcached
+
+     tags:
+       - packages
+       - template: src=templates/src.j2 dest=/etc/foo.conf
+
+     tags:
+       - configuration
+------
+
+=== Utilizando tags
+
+Utilizando o vim crie o  quarto playbook com o nome *_playbook-tag.yaml_*
+
+=== Executando playbook com tags
+
+Executando apenas a tag configuration
+
+ ansible-playbook -i inventario.ini  playbook-tag.yaml --tags “configuration”
+
+Executando apenas a tag notification
+
+ ansible-playbook -i inventario.ini  playbook-tag.yaml --skip-tags "notification"
+
+=== Executando tags padrão do Ansible
+
+ ansible-playbook example.yaml --tags “tagged” <1>
+ ansible-playbook example.yaml --tags “untagged” <2>
+ ansible-playbook example.yaml --tags “all” <2>
+
+<1> Será executada todas as tarefas que tenham uma tag amarrada
+<2> Será executada todas as tarefas sem tag
+<3> Executa todas as tarefas independente da tag
+
+=== Utilizando tags
+
+Utilizando o vim crie o  quinto playbook com o nome *_playbook-tag.yaml_*
+
+=== Execute o playbook
+
+ ansible-playbook -i inventario.ini  ~./playbook-tag.yaml
+
+== LAB10 - Trabalhando com condicional
+
+*Quando devo utilizar condicional ?*
+
+O uso de condicionais se da quando temos situações onde não sabemos exatamente qual sistema ou condicação exata que será encontrada. +
+
+Neste caso o condicacional consegue aplicar uma condicação para validar se o alvo condiz com contexto do playbook e se combinar, executar o restante do playbook.
+
+----
+---
+-
+ name: Trabalhando com Condicional
+ hosts: web
+ remote_user: ansible
+ become: yes
+
+ tasks:
+ - name: install Apache
+   yum: name=httpd state=removed
+   when: ansible_os_family == "RedHat"
+
+----
+
+*Valide com comando*
+
+ sudo yum history list 12
+
+== LAB11 - Trabalhando com com saída de comandos
+
+------
+---
+-
+ name: Trabalhando com  saida de comandos
+ hosts: web
+ remote_user: ansible
+ become: yes
+ tasks:
+
+   - name: Saida do comando httpd
+     shell: httpd -v|grep version|awk '{print $3}'|cut -f2 -d'/'
+     register: result
+
+   - debug: var=result
+------
+=== Testando saída de comando
+
+Utilizando o vim crie o  sexto playbook com o nome *_playbook-saida.yaml_*
+
+==== Execute o playbook
+
+ ansible-playbook -i inventario.ini  ~./playbook-saida.yaml
+
+
+== LAB12 - Ignorando erros
+
+-----
+---
+-
+  name: Ignorando errors
+  hosts: web
+  remote_user: ansible-core
+  become: yes
+  tasks: 
+  
+    - name: ping host
+      command: ping -c1 www.uolbbb.com.jp
+      ignore_errors: yes
+
+    - name: remove apache mesmo depois do uolbbb.com.jp nao pingar
+      yum: name=httpd state=absent
+
+-----
+
+=== Testando a função para ignorar erros
+
+Utilizando o vim crie o  setimo playbook com o nome *_playbook-erros.yaml_*
+
+=== Execute o playbook
+
+ ansible-playbook -i inventario.ini  ~./playbook-erros.yaml
+
+
+=== Tratando mais erros
+
+-----
+---
+-
+  name: Ignorando errors
+  hosts: web
+  remote_user: ansible
+  become: yes
+
+  tasks:
+   - block:
+   - debug: msg='i execute normally'
+   - command: /bin/false
+   - debug: msg='i never execute, cause ERROR!'
+ rescue:
+   - debug: msg='I caught an error'
+   - command: /bin/false
+   - debug: msg='I also never execute :-('
+ always:
+   - debug: msg="this always executes"
+-----
+
+=== Testando a função para ignorar erros
+
+   Utilizando o vim crie o  setimo e meio playbook com o nome *_playbook-erros2.yaml_*
+
+=== Execute o playbook
+
+    ansible-playbook -i inventario.ini  ~./playbook-erros2.yaml
+
+== LAB13 - Tratando arquivos
+
+Imagine uma situação onde você precisa alterar uma única linha de um arquivo de configuração em mais de 100 servidores, complicado ?  ++++
+
+
+
+----
+---
+-
+  name: Tratando arquivos Selinux e HTTPD
+  hosts: web
+  remote_user: ansible-core
+  become: yes
+
+  tasks:
+    - name: Tratando o arquivo de configuração selinux
+      lineinfile: dest=/etc/selinux/config regexp=^SELINUX=  <1>
+      line=SELINUX=enforcing
+
+    - name: Tratando o arquivo de configuração httpd
+      lineinfile: dest=/etc/httpd/conf/httpd.conf regexp="^Listen " <2>
+      insertafter="^#Listen " line="Listen 8080"
+
+----
+
+<1> Abre o arquivo  /etc/selinux/config e altera a linha para SELINUX=enforcing
+<2> Abre o arquivo  /etc/http/conf/httpd.conf e altera a linha para Listen 8080
+
+=== Testando a função para de tratamento de arquivos
+
+   Utilizando o vim crie o  oitavo playbook com o nome *_playbook-tratamento.yaml_*
+
+=== Execute o playbook
+
+    ansible-playbook -i inventario.ini  ~./playbook-tratamento.yaml
+
+
+
+== LAB14 - Trabalhando com templates
+
+Se você fez a programação na Web, provavelmente usou um sistema de modelo para gerar HTML. Caso não tenha, um modelo é apenas um arquivo de texto que possui sintaxe especial para especificar variáveis que devem ser substituídas por valores. +
+
+Se você já recebeu um email automatizado de uma empresa, provavelmente está usando um modelo de e-mail. ++++
+
+Ansible usa o mecanismo de modelo *_Jinja2_* para implementar modelos +
+
+----
+---
+-
+  name: Trabalhando com template jinja2
+  hosts: web
+  remote_user: ansible
+  become: yes
+    vars: <4>
+    http_port: 80
+    max_clients: 200
+  remote_user: root
+
+  tasks:
+  - name: Valida que o Apache esteja na última versão
+    yum: name=httpd state=latest <3>
+
+  - name: Substituia o arquivo de configuração httd.conf <2>
+    template: src=/template/httpd.j2 dest=/etc/http/httpd.conf <1>
+    notify:
+    - restart apache
+
+  - name: ensure apache is running (and enable it at boot)
+    service: name=httpd state=started enabled=yes
+
+  handlers:
+    - name: restart apache
+      service: name=httpd state=restarted <5>
+----
+
+<1> Ansible copia arquivo /srv/httpd.j2 para /etc/httpd.conf
+<2> Utilize as variaveis substituindo o arquivo de configuração /etc/http/httpd.conf
+<3> Valida que o pacote httpd na última versão
+<4> Variáveis que serão utilizada na substituição de vários parametros do arquivo de configuração "httpd.conf"
+<5> Este handlers garante que o serviço httpd será reinciado
+
+=== Testando a função jinja2
+
+Utilizando o vim crie o  decimo playbook com o nome *_playbook-jinga2.yaml_*
+
+=== Execute o playbook
+
+    ansible-playbook -i inventario.ini  ~./playbook-jinga2.yaml
+
+== LAB15 - Ansible e servidor Windows
+
+Ansible é orquestrador que permite conectar multiplas plataformas. Agora vamos conectar servidor Windows Server 2012.
+
+=== Procedimento para instalação do Ansible modulo winrm - instalação do modulo pywinrm
+
+ pip install pywinrm
+
+=== Insira as variaveis para conectar ao servidor Windows Server
+
+ /etc/ansible/group_vars/windows
+
+ --------------------------------------------
+ ---
+ ansible_user: administrator
+ ansible_password: windows%2018
+ ansible_port: 5986
+ ansible_connection: winrm
+ ansible_winrm_server_cert_validation: ignore
+
+
+
+### Testando conexão Ansible com servidor Windows
+
+ ansible windows -m win_ping
+
+
+Fim do Laboratório - Ansible CORE_
+
+
+== Trabalhando com repositório Git
+
+
+=== O que é git ?
+
+Git pronunciado [git] (ou pronunciado [dit] em inglês britânico) é um sistema de controle de versões distribuído, usado principalmente no desenvolvimento de software, mas pode ser usado para registrar o histórico de edições de qualquer tipo de arquivo. O Git foi inicialmente projetado e desenvolvido por Linus Torvalds para o desenvolvimento do kernel Linux, mas foi adotado por muitos outros projetos.
+
+Cada diretório de trabalho do Git é um repositório com um histórico completo e habilidade total de acompanhamento das revisões, não dependente de acesso a uma rede ou a um servidor central. O Git também facilita a reprodutibilidade científica em uma ampla gama de disciplinas, da ecologia à bioinformática, arqueologia à zoologia.[1]
+
+
+O Git é um software livre, distribuído sob os termos da versão 2 da GNU General Public License
+
+=== Instalação do git
+
+ yum install git
+
+
+=== Integração com repositório  git
+
+1.Criação de repositórios
+
+A criação de um repositório pode ser feita diretamente no site do git
+
+2.Sincronizar reopsitorios  (enviando arquivos - pull)
+
+Apos ter o repositório criado é necessário integrar o diretorio ao git repositorio remoto
+
+ mkdir /home/ansible/git/workshop
+ echo "# workshop" >> README.md
+ git init
+ git add README.md
+ git commit -m "first commit"
+ git remote add origin https://github.com/aspenbr/workshop.git
+ git pull origin master
+
+
+3.Se a necessidade é insirir o arquivo dentro do repositorio remoto (push - empurrar - enviar para git)
+
+ git add <nome da pasta>
+ git commit -m "comentario"  nome_pasta
+ git push -u  origin master
+
+.Uso Rapido do git
+
+|===
+|Comando| Ação
+|git add .  | Adiciona todos os arquivo
+|git commit -m "comentario do commit" nome_arquivo ou pasta
+|git push -u origin master | Envia os arquivos para repositorio
+|git pull orgin master | Puxa o arquivo do servidor git
+|===

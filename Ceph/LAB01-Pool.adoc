@@ -1,0 +1,162 @@
+= Laboratório
+-------
+
+= Neste laboratório iremos trabalhar com a gerência de pools.
+
+== O que são pool ?
+   Pools são partições de armazenamento do Ceph Cluster. Cada pool é amarrado a um PG (Placement Group) que por sua vez é ligado a um ou mais OSD (no caso de réplica)
+
+== Atributos de um pool ?
+   - Permissionamento e nível de acesso
+   - Multiplos namespace
+   - Mecanismo de proteção
+  -  Definição de réplicas
+   - Permitir definir o numero de PG
+   - Definição das regras de alocação
+
+== Definição de replica
+   - Um pool por padrão tem três réplicas
+   - Todo pool tem um minimo de replica. Para entender o valor minimo de replica: Size - (size /2 ) +
+     Exemplo:
+     Um pool foi criado com 6 réplicas. Então o valor de size é 6. Logo teremos no minimo por padrão 3 réplicas. 6 - (6/2) = 3
+
+
+== Pool padrão
+   Desde da versão  RHCS 1.3.0 somente o rbd pool é configurado por padrão. Este pool é usado pelo RBd images. Este pool padrão pode ser removido
+
+
+=== Fique esperto
+   - Na instalação do Ceph pelo Ansible, o pool RBD é disponibilizado. A instalação pelo Red Hat storage console não disponibiliza este pool por padrão.
+   - A média é termos 100 PG por 1 OSD
+   - Maior numero de PG e aumenta a demanda por OSD. Logo será teremos maior consumo de memória RAM e CPU dos nós de Monitor para monitorar os nós de OSD;
+
+
+= Exercícios guiados
+
+
+== Trabalhando com Pools
+   Neste laboratório iremos trabalhar com a gestão de pools dentro do cluster Ceph.
+
+== Comandos para gestão dos pools
+.Comandos comentados
+|===
+|Comando | Explicação
+|ceph osd pool create *_<pool_name>_* *_<pg-num>_* | *pool_name:* nome do pool +
+                                                     *pg_num:* quantidade placement group
+|ceph osd pool *_<pool_name>_* *_<pg-num>_* *_<pgp-num>_* erasure [ec-profile-name] | *pgp-num*: Total real de pgs configurado no ambiente +
+                                                                                      *erasure*: Nome do profile erasure
+|===
+
+
+
+=== Exercício01 - Coletando informações de um pool
+.Lista de comando
+|===
+|Comando a ser executado |Resultado esperado
+|rados lspools |listagem dos pools
+|ceph osd lspools |listagem dos pools mais seu id
+|ceph osd dump |Detalhes de todos os pools
+|ceph osd dump pipe grep rbd |Detalhes de um pool específico
+|ceph df |Mostrar todos os pools e seus dados estatísticos de consumo
+|===
+
+=== Exercício02 - Gerenciando pool
+.Lista de comando
+|===
+|Comando a ser executado| Ação esperada
+|ceph osd pool create testepool 64 | Será criado o pool testepool
+|ceph df | Valide os dados do pool testepool
+|ceph osd pool delete testepool testepool --yes-i-really-really-mean-it | O pool "testepool" será removido
+|ceph osd pool create testepool 64 | O pool será criado novamente
+|ceph osd pool rename testepool bbpool | O pool será renomeado de testepool para bbpool
+|ceph df |  Verifique os dados estastisticos do pool "bbpool"
+|ceph osd pool set bbpool min_size 2 | Define que o minimo de replica do pool bbpool será 2
+|ceph osd pool stats |Mostra estatística de todos  os pools dentro cluster
+|ceph osd pool stats rbd | Mostra dados estatísticos específicos do pool rbd
+|ceph osd pool stats bbtool | Mostra dados estatísticos específicos do pool bbtool
+|===
+
+=== Exercício03 - Definindo a quantidade de réplicas de um pool
+.Lista de comando
+|===
+|Passo|Comando a ser executado | Ação esperada
+|1|ceph osd pool set bbpool size 3 | O pool bbpool foi definido para três réplicas
+|2|ceph osd pool set bbpool min_size 2 | O pool bbpool será definido para ter no minimo 2 réplicas
+|3|ceph osd pool set bbpool nosizechange 1 | O pool agora terá uma flag que evitará  evitar erros de configuração na definição na quantidade size e min_size
+|4|ceph osd pool set bbpool size 2| Você não poderá alterar a quantidade de replica *(size)*
+|5|ceph osd pool set bbpool min_size 2 | Você não poderá alterar a quantidade minima de replica *(size)*
+|6|ceph osd pool set bbpool nosizechange 0 | O pool agora não tem mais a flag que trava as configurações do tamanho do size e min_size
+|7|Repita a linha 4 e 5| Você poderá alterar as quantidade de replica minima e a padrão
+|===
+
+=== Exercício 04 - Populando um pool
+.Lista de comando
+|===
+|Comando a ser executado | Ação esperada
+|rados -p bbpool put test /tmp/test_bbpool* | Realiza upload test para dentro do pool bbpool
+|rados -p bbpool ls | Verifica o contendo de um pool
+|rados -p bbpool stat test |Verifica o tamanho do arquivo test
+|===
+
+.Observação
+ - `*` Crie o arquivo pelo comando > /tmp/test_bbpool
+
+=== Exercício 05 - Removendo um pool
+.Lista de comando
+|===
+|Comando a ser executado | Ação esperada
+|ceph osd pool set bbpool nodelete 1| Seta 1 para bloquear a remoção do pool
+|ceph osd pool set bbpool nodelete 0| Seta 0 para liberar a remoção do pool
+|ceph osd pool set bbpool nopgchange 1 | Seta 1 para bloquear alteração do Placement Group ou 0 para liberar à alteração do Placement Group
+|ceph osd pool delete bbpool bbpool --yes-i-really-really-mean-it | Remove o pool bbpool
+|===
+
+=== Exercício 06 - Trabalhando com Erasure Coded Pools
+Neste exercicio iremos trabalhar modelos de erasure coded pool
+
+.Lista de comando
+|===
+|Comando a ser executado | Ação esperada
+|ceph osd erasure-code-profile ls | Será exibido o profile default
+|ceph osd erasure-code-profile set ceph125 > k=2 m=1 ruleset-failure-domain=host | Cria um profile chamado ceph125 usando o padrão de erasure-code jerasure.
+|ceph osd erasure-code-profile ls | Será exibido o profiledefault e o ceph125
+|ceph osd erasure-code-profile get ceph125 | Será exibido todos os detalhes do profile ceph125
+|ceph osd pool create bbpool2 64 64 erasure ceph125 | Será criado o bbpool2 usando o profile erasure ceph125 e com os parametros PG=64 PGp=64
+|ceph df |Mostra os detalhes de consumo dos pools existente. Entre eles o bbpool2
+|ceph osd dump |grep bbpool2  |Mostra os detalhes como size, min_size,tipo de profile erasure, size e min_size
+|dd if=/dev/zero of=/tmp/file bs=4k count=1000 |Cria um arquivo objeto
+|for i in $(seq 0 199); do rados -p bbpool2 put /tmp/file.${i} /tmp/file; done | Copia 200 o arquivo criado
+|ceph df | Verifique a quantidade de dados utilizado no pool
+|ceph osd pool delete bbpool2 bbpool2 --yes-i-really-really-mean-it | Remove o pool bbpool2
+|ceph osd erasure-code-profile ls | Lista todos os profiles
+|ceph osd erasure-code-profile  rm ceph125| Remove o profile ceph125
+|===
+
+.Observação
+ - `*` O tamanho erasure é k+m (k: numero de datachunks) (m: numero de codificação chunks)
+
+=== Exercício 07 - Expandido cluster Ceph
+Neste exercicio iremos expandir o cluster Ceph, adicionando novos OSDs.
+
+.Observação
+ - Existe nos servidores Ceph01 / Ceph02 / Ceph03 um terceiro disco não formatado "/dev/sdX".
+ - O dicos /dev/sdx será trabalhado neste exercício
+ -
+
+
+.Procedimento expandindo cluster OSD
+
+1. Loge no servidor *deploy*.
+
+2. Abra o arquivo "*/usr/share/ceph-ansible/group_vars/osds*"
+
+3. Insira o nome do disco /dev/vdB
+   devices:
+     - /dev/vdb
+4. Execute novamente o playbook.
+   - *Comando:* ansible-playbook site.yml
+
+5. Loge no servidor ceph01 para validar os novos OSDs
+   - *Comando:* ceph osd stat
+   - *Comando:* ceph osd tree
+  -  *Comando:* ceph osd df

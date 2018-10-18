@@ -1,0 +1,33 @@
+Requisitos de software
+----------------------
+
+.Subscrições utilizadas
+   - Red Hat Ceph Storage MON 2 for Red Hat Enterprise Linux 7 Server (RPMs)
+   - Red Hat Ceph Storage OSD 2 for Red Hat Enterprise Linux 7 Server (RPMs)
+   - Red Hat Enterprise Linux 7 Server (RPMs)
+
+.Versão do RHEL
+   - Red Hat Enterprise Linux Server release 7.3 (Maipo)
+
+Requistos de rede
+-----------------
+
+.Networking
+   - 2 interfaces de rede
+   - Podem ser bridge ou nat
+   - Rede para cluster <> 192.168.0.230
+   -  Rede para acesso  <> 192.168.10.230
+
+Requisitos de storage
+---------------------
+
+.Discos
+    - 1 para sistema operacional
+    - 1 para osd
+
+Topologia do ambiente
+---------------------
+
+.Tipo de ambiente: POC
+    - 1 Monitor
+    - 2 MON
